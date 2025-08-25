@@ -49,10 +49,12 @@ export function RepoSelector({ onRepoSelected, selectedRepo }: RepoSelectorProps
   }
 
   const verifyRepository = async (repoUrl: string) => {
+    console.log("[v0] Starting repository verification for:", repoUrl)
     setVerifying(true)
     setError(null)
 
     try {
+      console.log("[v0] Making POST request to /api/github/verify")
       const response = await fetch("/api/github/verify", {
         method: "POST",
         headers: {
@@ -61,12 +63,27 @@ export function RepoSelector({ onRepoSelected, selectedRepo }: RepoSelectorProps
         body: JSON.stringify({ repoUrl }),
       })
 
-      const data = await response.json()
+      console.log("[v0] Response status:", response.status)
+      console.log("[v0] Response headers:", Object.fromEntries(response.headers.entries()))
+
+      const responseText = await response.text()
+      console.log("[v0] Raw response text:", responseText)
+
+      let data
+      try {
+        data = JSON.parse(responseText)
+        console.log("[v0] Parsed response data:", data)
+      } catch (parseError) {
+        console.log("[v0] Failed to parse JSON response:", parseError)
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`)
+      }
 
       if (!response.ok) {
+        console.log("[v0] API returned error:", data.error)
         throw new Error(data.error || "Failed to verify repository")
       }
 
+      console.log("[v0] Repository verification successful:", data)
       onRepoSelected({
         url: repoUrl,
         verified: true,
@@ -74,7 +91,10 @@ export function RepoSelector({ onRepoSelected, selectedRepo }: RepoSelectorProps
         projectId: data.project?.id,
       })
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to verify repository")
+      console.log("[v0] Repository verification error:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to verify repository"
+      console.log("[v0] Setting error message:", errorMessage)
+      setError(errorMessage)
     } finally {
       setVerifying(false)
     }
