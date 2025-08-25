@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[v0] Starting repository verification...")
     const supabase = await createClient()
 
     const {
@@ -11,10 +12,13 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.log("[v0] Authentication error:", authError)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    console.log("[v0] User authenticated:", user.id)
 
     const { repoUrl } = await request.json()
+    console.log("[v0] Repository URL:", repoUrl)
 
     if (!repoUrl) {
       return NextResponse.json({ error: "Repository URL is required" }, { status: 400 })
@@ -23,10 +27,12 @@ export async function POST(request: NextRequest) {
     // Parse GitHub URL to extract owner and repo name
     const urlMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
     if (!urlMatch) {
+      console.log("[v0] Invalid GitHub URL format:", repoUrl)
       return NextResponse.json({ error: "Invalid GitHub repository URL" }, { status: 400 })
     }
 
     const [, owner, repoName] = urlMatch
+    console.log("[v0] Parsed repo:", { owner, repoName })
 
     // Get the user's GitHub access token
     const {
@@ -35,27 +41,48 @@ export async function POST(request: NextRequest) {
     const accessToken = session?.provider_token
 
     if (!accessToken) {
-      return NextResponse.json({ error: "GitHub access token not found" }, { status: 400 })
+      console.log("[v0] No GitHub access token found")
+      return NextResponse.json(
+        { error: "GitHub access token not found. Please reconnect your GitHub account." },
+        { status: 400 },
+      )
     }
+    console.log("[v0] GitHub access token found")
 
     // Verify ownership
+    console.log("[v0] Verifying repository ownership...")
     const isOwner = await verifyRepoOwnership(owner, repoName, accessToken)
     if (!isOwner) {
+      console.log("[v0] Repository ownership verification failed")
       return NextResponse.json({ error: "You don't have permission to verify this repository" }, { status: 403 })
     }
+    console.log("[v0] Repository ownership verified")
 
     // Fetch repository details
+    console.log("[v0] Fetching repository details...")
     const repoDetails = await fetchRepoDetails(owner, repoName, accessToken)
+    console.log("[v0] Repository details fetched:", {
+      name: repoDetails.name,
+      stars: repoDetails.stargazers_count,
+      forks: repoDetails.forks_count,
+    })
 
-    const { data: existingProject } = await supabase
+    console.log("[v0] Checking for existing project...")
+    const { data: existingProject, error: selectError } = await supabase
       .from("projects")
       .select("id")
       .eq("github_repo_url", repoUrl)
       .eq("user_id", user.id)
       .single()
 
+    if (selectError && selectError.code !== "PGRST116") {
+      console.error("[v0] Database select error:", selectError)
+      return NextResponse.json({ error: "Database error while checking existing project" }, { status: 500 })
+    }
+
     let project
     if (existingProject) {
+      console.log("[v0] Updating existing project:", existingProject.id)
       // Update existing project
       const { data: updatedProject, error: updateError } = await supabase
         .from("projects")
@@ -77,7 +104,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to update repository information" }, { status: 500 })
       }
       project = updatedProject
+      console.log("[v0] Project updated successfully")
     } else {
+      console.log("[v0] Creating new project...")
       // Insert new project
       const { data: newProject, error: insertError } = await supabase
         .from("projects")
@@ -101,6 +130,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to save repository information" }, { status: 500 })
       }
       project = newProject
+      console.log("[v0] Project created successfully:", project.id)
     }
 
     console.log("[v0] Repository verification successful:", { projectId: project.id, repoUrl })
