@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useWallet } from "@solana/wallet-adapter-react"
-import { Transaction, LAMPORTS_PER_SOL, Connection } from "@solana/web3.js"
+import { Transaction } from "@solana/web3.js"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,8 +15,9 @@ import { RepoSelector } from "@/components/repo-selector"
 import { WalletButton } from "@/components/wallet-button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Github, Rocket, Check, Wallet, AlertCircle, Upload, X, RefreshCw, LogOut } from "lucide-react"
+import { Github, Rocket, Check, AlertCircle, Upload, X } from "lucide-react"
 import { uploadMetadata, createPumpFunToken, type TokenMetadata } from "@/lib/pump-fun"
+import SolBalanceCard from "@/components/sol-balance-card"
 
 interface RepoData {
   url: string
@@ -40,72 +41,13 @@ export function LaunchTokenForm() {
     description: "",
     imageUrl: "",
   })
-  const [solBalance, setSolBalance] = useState<number | null>(null)
   const [buyAmount, setBuyAmount] = useState<string>("0.1")
-  const [loadingBalance, setLoadingBalance] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [launchResult, setLaunchResult] = useState<any>(null)
-
-  const fetchSolBalance = async () => {
-    console.log("[v0] fetchSolBalance called - connected:", connected, "publicKey:", publicKey?.toString())
-
-    if (!connected || !publicKey) {
-      console.log("[v0] Wallet not connected or no public key, setting balance to null")
-      setSolBalance(null)
-      return
-    }
-
-    setLoadingBalance(true)
-    console.log("[v0] Starting SOL balance fetch for wallet:", publicKey.toString())
-
-    try {
-      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
-
-      console.log("[v0] Fetching balance from mainnet...")
-      const balanceInLamports = await connection.getBalance(publicKey)
-      console.log("[v0] Got balance:", balanceInLamports, "lamports")
-
-      const solBalance = balanceInLamports / LAMPORTS_PER_SOL
-      console.log("[v0] Converted to SOL:", solBalance)
-
-      setSolBalance(solBalance)
-      console.log("[v0] Balance state updated to:", solBalance)
-
-      toast({
-        title: "Balance Updated",
-        description: `Current balance: ${solBalance.toFixed(4)} SOL`,
-      })
-    } catch (error) {
-      console.error("[v0] Error fetching SOL balance:", error)
-      setSolBalance(0)
-      toast({
-        title: "Balance Error",
-        description: "Failed to fetch SOL balance. Please refresh manually.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingBalance(false)
-    }
-  }
-
-  useEffect(() => {
-    console.log("[v0] useEffect triggered - connected:", connected, "publicKey:", publicKey?.toString())
-    if (connected && publicKey) {
-      console.log("[v0] Wallet connected, fetching balance in 1 second...")
-      const timer = setTimeout(() => {
-        console.log("[v0] Timer triggered, calling fetchSolBalance")
-        fetchSolBalance()
-      }, 1000)
-      return () => clearTimeout(timer)
-    } else {
-      console.log("[v0] Wallet not connected, setting balance to null")
-      setSolBalance(null)
-    }
-  }, [connected, publicKey])
 
   const handleRepoSelected = (repoData: RepoData) => {
     setSelectedRepo(repoData)
@@ -187,8 +129,6 @@ export function LaunchTokenForm() {
     if (buyAmount && !isNaN(buyAmountNum)) {
       if (buyAmountNum < 0) {
         errors.buyAmount = "Buy amount cannot be negative"
-      } else if (solBalance !== null && buyAmountNum > solBalance) {
-        errors.buyAmount = "Buy amount exceeds your SOL balance"
       }
     }
 
@@ -331,10 +271,6 @@ export function LaunchTokenForm() {
         description: `${tokenData.symbol} is now live on Pump.fun`,
       })
 
-      setTimeout(() => {
-        fetchSolBalance()
-      }, 2000)
-
       setStep(3)
     } catch (error) {
       console.error("[v0] Error launching token:", error)
@@ -353,7 +289,6 @@ export function LaunchTokenForm() {
   const handleDisconnectWallet = async () => {
     try {
       await disconnect()
-      setSolBalance(null)
       toast({
         title: "Wallet Disconnected",
         description: "Your wallet has been disconnected successfully.",
@@ -383,51 +318,7 @@ export function LaunchTokenForm() {
         </Card>
       )}
 
-      {connected && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="flex items-center justify-between pt-6">
-            <div className="flex items-center gap-4">
-              <Wallet className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-sm font-medium text-green-800">
-                  SOL Balance {publicKey && `(${publicKey.toString().slice(0, 3)}...)`}
-                </p>
-                <p className="text-lg font-bold text-green-900">
-                  {loadingBalance ? (
-                    <span className="flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Loading...
-                    </span>
-                  ) : solBalance !== null ? (
-                    `${solBalance.toFixed(4)} SOL`
-                  ) : (
-                    "Unable to load"
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchSolBalance}
-                disabled={loadingBalance}
-                className="border-green-300 text-green-700 hover:bg-green-100 bg-transparent"
-              >
-                <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDisconnectWallet}
-                className="border-red-300 text-red-700 hover:bg-red-100 bg-transparent"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {connected && <SolBalanceCard />}
 
       <div className="flex items-center justify-center space-x-4 mb-8">
         <div className={`flex items-center gap-2 ${step >= 1 ? "text-primary" : "text-muted-foreground"}`}>
@@ -673,9 +564,6 @@ export function LaunchTokenForm() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Amount of SOL to spend on initial token purchase (leave empty or 0 for free launch)
                   </p>
-                  {solBalance !== null && (
-                    <p className="text-xs text-muted-foreground">Available balance: {solBalance.toFixed(4)} SOL</p>
-                  )}
                 </div>
 
                 <div className="flex gap-4 pt-4">

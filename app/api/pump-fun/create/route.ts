@@ -11,38 +11,138 @@ export async function POST(request: NextRequest) {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
-    if (authError || !user) {
-      console.log("[v0] Authentication failed:", authError)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (authError) {
+      console.log("[v0] Authentication error:", authError)
+      return NextResponse.json(
+        {
+          error: "Authentication failed",
+          details: `Supabase auth error: ${authError.message}`,
+          errorCode: "AUTH_ERROR",
+        },
+        { status: 401 },
+      )
+    }
+    if (!user) {
+      console.log("[v0] No user found in session")
+      return NextResponse.json(
+        {
+          error: "User not authenticated",
+          details: "No valid user session found. Please log in again.",
+          errorCode: "NO_USER_SESSION",
+        },
+        { status: 401 },
+      )
     }
 
-    const { name, symbol, description, image, website, creator, buyAmount, walletAddress } = await request.json()
+    let requestData
+    try {
+      requestData = await request.json()
+    } catch (parseError) {
+      console.log("[v0] Failed to parse request JSON:", parseError)
+      return NextResponse.json(
+        {
+          error: "Invalid request format",
+          details: "Request body must be valid JSON",
+          errorCode: "INVALID_JSON",
+        },
+        { status: 400 },
+      )
+    }
+
+    const { name, symbol, description, image, website, creator, buyAmount, walletAddress } = requestData
     console.log("[v0] Token data received:", { name, symbol, description, creator, buyAmount, walletAddress })
 
-    // Validate required fields
-    if (!name || !symbol || !description || !creator || !walletAddress) {
-      console.log("[v0] Missing required fields")
-      return NextResponse.json({ error: "Missing required fields including wallet address" }, { status: 400 })
+    const missingFields = []
+    if (!name) missingFields.push("name")
+    if (!symbol) missingFields.push("symbol")
+    if (!description) missingFields.push("description")
+    if (!creator) missingFields.push("creator")
+    if (!walletAddress) missingFields.push("walletAddress")
+
+    if (missingFields.length > 0) {
+      console.log("[v0] Missing required fields:", missingFields)
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          details: `The following fields are required: ${missingFields.join(", ")}`,
+          missingFields,
+          errorCode: "MISSING_FIELDS",
+        },
+        { status: 400 },
+      )
     }
 
-    const mintKeypair = Keypair.generate()
-    console.log("[v0] Generated mint keypair:", mintKeypair.publicKey.toString())
+    if (symbol.length > 10) {
+      return NextResponse.json(
+        {
+          error: "Invalid token symbol",
+          details: "Token symbol must be 10 characters or less",
+          errorCode: "INVALID_SYMBOL_LENGTH",
+        },
+        { status: 400 },
+      )
+    }
+
+    if (name.length > 50) {
+      return NextResponse.json(
+        {
+          error: "Invalid token name",
+          details: "Token name must be 50 characters or less",
+          errorCode: "INVALID_NAME_LENGTH",
+        },
+        { status: 400 },
+      )
+    }
+
+    let mintKeypair
+    try {
+      mintKeypair = Keypair.generate()
+      console.log("[v0] Generated mint keypair:", mintKeypair.publicKey.toString())
+    } catch (keypairError) {
+      console.log("[v0] Failed to generate keypair:", keypairError)
+      return NextResponse.json(
+        {
+          error: "Keypair generation failed",
+          details: "Failed to generate Solana keypair for token mint",
+          errorCode: "KEYPAIR_GENERATION_FAILED",
+        },
+        { status: 500 },
+      )
+    }
 
     let imageFile: File | Blob
-    if (image && image.startsWith("data:")) {
-      // Handle base64 images
-      const response = await fetch(image)
-      imageFile = await response.blob()
-    } else if (image && image.startsWith("http")) {
-      // Handle URL images
-      const response = await fetch(image)
-      imageFile = await response.blob()
-    } else {
-      // Use default 1x1 pixel PNG
-      const defaultImageData =
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg=="
-      const response = await fetch(defaultImageData)
-      imageFile = await response.blob()
+    try {
+      if (image && image.startsWith("data:")) {
+        console.log("[v0] Processing base64 image...")
+        const response = await fetch(image)
+        if (!response.ok) {
+          throw new Error(`Failed to process base64 image: ${response.status}`)
+        }
+        imageFile = await response.blob()
+      } else if (image && image.startsWith("http")) {
+        console.log("[v0] Fetching image from URL:", image)
+        const response = await fetch(image)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image from URL: ${response.status} ${response.statusText}`)
+        }
+        imageFile = await response.blob()
+      } else {
+        console.log("[v0] Using default placeholder image")
+        const defaultImageData =
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg=="
+        const response = await fetch(defaultImageData)
+        imageFile = await response.blob()
+      }
+    } catch (imageError) {
+      console.log("[v0] Image processing failed:", imageError)
+      return NextResponse.json(
+        {
+          error: "Image processing failed",
+          details: `Failed to process token image: ${imageError instanceof Error ? imageError.message : "Unknown image error"}`,
+          errorCode: "IMAGE_PROCESSING_FAILED",
+        },
+        { status: 400 },
+      )
     }
 
     const formData = new FormData()
@@ -57,19 +157,73 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Uploading metadata to IPFS...")
 
-    const metadataResponse = await fetch("https://pump.fun/api/ipfs", {
-      method: "POST",
-      body: formData,
-    })
+    let metadataResponse
+    let metadataResult
+    try {
+      metadataResponse = await fetch("https://pump.fun/api/ipfs", {
+        method: "POST",
+        body: formData,
+      })
 
-    if (!metadataResponse.ok) {
-      const errorText = await metadataResponse.text()
-      console.error("[v0] IPFS upload failed:", errorText)
-      throw new Error(`Failed to upload metadata to IPFS: ${errorText}`)
+      if (!metadataResponse.ok) {
+        const errorText = await metadataResponse.text()
+        console.error("[v0] IPFS upload failed with status:", metadataResponse.status)
+        console.error("[v0] IPFS error response:", errorText)
+
+        if (metadataResponse.status === 413) {
+          return NextResponse.json(
+            {
+              error: "Image too large",
+              details: "The uploaded image is too large. Please use an image smaller than 15MB.",
+              errorCode: "IMAGE_TOO_LARGE",
+            },
+            { status: 400 },
+          )
+        } else if (metadataResponse.status === 415) {
+          return NextResponse.json(
+            {
+              error: "Unsupported image format",
+              details: "Please use a supported image format (PNG, JPG, GIF).",
+              errorCode: "UNSUPPORTED_IMAGE_FORMAT",
+            },
+            { status: 400 },
+          )
+        } else {
+          return NextResponse.json(
+            {
+              error: "IPFS upload failed",
+              details: `Pump.fun IPFS service returned error ${metadataResponse.status}: ${errorText}`,
+              errorCode: "IPFS_UPLOAD_FAILED",
+            },
+            { status: 500 },
+          )
+        }
+      }
+
+      metadataResult = await metadataResponse.json()
+      console.log("[v0] IPFS upload successful:", metadataResult)
+
+      if (!metadataResult.metadataUri) {
+        return NextResponse.json(
+          {
+            error: "Invalid IPFS response",
+            details: "IPFS upload succeeded but no metadata URI was returned",
+            errorCode: "INVALID_IPFS_RESPONSE",
+          },
+          { status: 500 },
+        )
+      }
+    } catch (ipfsError) {
+      console.error("[v0] IPFS upload network error:", ipfsError)
+      return NextResponse.json(
+        {
+          error: "IPFS upload network error",
+          details: `Failed to connect to Pump.fun IPFS service: ${ipfsError instanceof Error ? ipfsError.message : "Network error"}`,
+          errorCode: "IPFS_NETWORK_ERROR",
+        },
+        { status: 500 },
+      )
     }
-
-    const metadataResult = await metadataResponse.json()
-    console.log("[v0] IPFS upload successful:", metadataResult)
 
     const createTokenPayload = {
       privateKey: Array.from(mintKeypair.secretKey)
@@ -111,11 +265,37 @@ export async function POST(request: NextRequest) {
       message: "Token created successfully on Pump.fun!",
     })
   } catch (error) {
-    console.error("[v0] Error in real Pump.fun token creation:", error)
+    console.error("[v0] Unexpected error in Pump.fun token creation:", error)
+
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      return NextResponse.json(
+        {
+          error: "Network connection failed",
+          details: "Unable to connect to external services. Please check your internet connection and try again.",
+          errorCode: "NETWORK_ERROR",
+          success: false,
+        },
+        { status: 503 },
+      )
+    }
+
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          error: "Data parsing error",
+          details: "Failed to parse response from external service",
+          errorCode: "PARSING_ERROR",
+          success: false,
+        },
+        { status: 500 },
+      )
+    }
+
     return NextResponse.json(
       {
-        error: "Failed to create token on Pump.fun",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "An unexpected error occurred during token creation",
+        errorCode: "INTERNAL_ERROR",
         success: false,
       },
       { status: 500 },
