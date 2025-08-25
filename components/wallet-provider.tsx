@@ -14,7 +14,7 @@ interface WalletContextProviderProps {
 }
 
 export function WalletContextProvider({ children }: WalletContextProviderProps) {
-  const endpoint = "https://api.mainnet-beta.solana.com"
+  const endpoint = "https://rpc.helius.xyz/?api-key=public"
 
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], [])
 
