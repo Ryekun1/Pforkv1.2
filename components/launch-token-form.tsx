@@ -51,23 +51,29 @@ export function LaunchTokenForm() {
   const [launchResult, setLaunchResult] = useState<any>(null)
 
   const fetchSolBalance = async () => {
+    console.log("[v0] fetchSolBalance called - connected:", connected, "publicKey:", publicKey?.toString())
+
     if (!connected || !publicKey) {
+      console.log("[v0] Wallet not connected or no public key, setting balance to null")
       setSolBalance(null)
       return
     }
 
     setLoadingBalance(true)
-    console.log("[v0] Fetching SOL balance for wallet:", publicKey.toString())
+    console.log("[v0] Starting SOL balance fetch for wallet:", publicKey.toString())
 
     try {
       const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
 
-      console.log("[v0] Getting balance from Solana RPC...")
+      console.log("[v0] Fetching balance from mainnet...")
       const balanceInLamports = await connection.getBalance(publicKey)
-      const solBalance = balanceInLamports / LAMPORTS_PER_SOL
+      console.log("[v0] Got balance:", balanceInLamports, "lamports")
 
-      console.log("[v0] Successfully fetched balance:", balanceInLamports, "lamports =", solBalance, "SOL")
+      const solBalance = balanceInLamports / LAMPORTS_PER_SOL
+      console.log("[v0] Converted to SOL:", solBalance)
+
       setSolBalance(solBalance)
+      console.log("[v0] Balance state updated to:", solBalance)
 
       toast({
         title: "Balance Updated",
@@ -87,9 +93,16 @@ export function LaunchTokenForm() {
   }
 
   useEffect(() => {
+    console.log("[v0] useEffect triggered - connected:", connected, "publicKey:", publicKey?.toString())
     if (connected && publicKey) {
-      fetchSolBalance()
+      console.log("[v0] Wallet connected, fetching balance in 1 second...")
+      const timer = setTimeout(() => {
+        console.log("[v0] Timer triggered, calling fetchSolBalance")
+        fetchSolBalance()
+      }, 1000)
+      return () => clearTimeout(timer)
     } else {
+      console.log("[v0] Wallet not connected, setting balance to null")
       setSolBalance(null)
     }
   }, [connected, publicKey])
