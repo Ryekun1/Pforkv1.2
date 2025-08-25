@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useWallet } from "@solana/wallet-adapter-react"
-import { Transaction } from "@solana/web3.js"
+import { Transaction, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +15,7 @@ import { RepoSelector } from "@/components/repo-selector"
 import { WalletButton } from "@/components/wallet-button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Github, Rocket, Check, Wallet, AlertCircle, Upload, X } from "lucide-react"
+import { Github, Rocket, Check, Wallet, AlertCircle, Upload, X, RefreshCw } from "lucide-react"
 import { uploadMetadata, createPumpFunToken, type TokenMetadata } from "@/lib/pump-fun"
 
 interface RepoData {
@@ -40,12 +40,46 @@ export function LaunchTokenForm() {
     description: "",
     imageUrl: "",
   })
+  const [solBalance, setSolBalance] = useState<number | null>(null)
+  const [buyAmount, setBuyAmount] = useState<string>("0.1")
+  const [loadingBalance, setLoadingBalance] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [launchResult, setLaunchResult] = useState<any>(null)
+
+  const fetchSolBalance = async () => {
+    if (!connected || !publicKey) {
+      setSolBalance(null)
+      return
+    }
+
+    setLoadingBalance(true)
+    try {
+      const connection = new Connection("https://api.mainnet-beta.solana.com")
+      const balance = await connection.getBalance(publicKey)
+      setSolBalance(balance / LAMPORTS_PER_SOL)
+    } catch (error) {
+      console.error("[v0] Error fetching SOL balance:", error)
+      toast({
+        title: "Balance Error",
+        description: "Failed to fetch SOL balance",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingBalance(false)
+    }
+  }
+
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchSolBalance()
+    } else {
+      setSolBalance(null)
+    }
+  }, [connected, publicKey])
 
   const handleRepoSelected = (repoData: RepoData) => {
     setSelectedRepo(repoData)
@@ -121,6 +155,15 @@ export function LaunchTokenForm() {
 
     if (tokenData.imageUrl && !tokenData.imageUrl.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i) && !imageFile) {
       errors.imageUrl = "Please enter a valid image URL or upload an image file"
+    }
+
+    const buyAmountNum = Number.parseFloat(buyAmount)
+    if (!buyAmount || isNaN(buyAmountNum) || buyAmountNum <= 0) {
+      errors.buyAmount = "Buy amount must be greater than 0"
+    } else if (solBalance !== null && buyAmountNum > solBalance) {
+      errors.buyAmount = "Buy amount exceeds your SOL balance"
+    } else if (buyAmountNum < 0.01) {
+      errors.buyAmount = "Minimum buy amount is 0.01 SOL"
     }
 
     setValidationErrors(errors)
@@ -214,6 +257,7 @@ export function LaunchTokenForm() {
           website: selectedRepo.url,
         },
         publicKey.toString(),
+        Number.parseFloat(buyAmount),
       )
 
       toast({
@@ -239,6 +283,7 @@ export function LaunchTokenForm() {
           tokenData,
           pumpFunData,
           metadataUri,
+          buyAmount: Number.parseFloat(buyAmount),
           transactionSignature: "mock_signature_" + Date.now(),
         }),
       })
@@ -251,6 +296,7 @@ export function LaunchTokenForm() {
       setLaunchResult({
         ...projectResult,
         pumpFunData,
+        buyAmount: Number.parseFloat(buyAmount),
         transactionSignature: "mock_signature_" + Date.now(),
       })
 
@@ -258,6 +304,10 @@ export function LaunchTokenForm() {
         title: "🎉 Token launched successfully!",
         description: `${tokenData.symbol} is now live on Pump.fun`,
       })
+
+      setTimeout(() => {
+        fetchSolBalance()
+      }, 2000)
 
       setStep(3)
     } catch (error) {
@@ -285,6 +335,40 @@ export function LaunchTokenForm() {
               <p className="text-sm text-orange-700">Connect your Solana wallet to launch tokens</p>
             </div>
             <WalletButton />
+          </CardContent>
+        </Card>
+      )}
+
+      {connected && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="flex items-center justify-between pt-6">
+            <div className="flex items-center gap-4">
+              <Wallet className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="text-sm font-medium text-green-800">SOL Balance</p>
+                <p className="text-lg font-bold text-green-900">
+                  {loadingBalance ? (
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </span>
+                  ) : solBalance !== null ? (
+                    `${solBalance.toFixed(4)} SOL`
+                  ) : (
+                    "Unable to load"
+                  )}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchSolBalance}
+              disabled={loadingBalance}
+              className="border-green-300 text-green-700 hover:bg-green-100 bg-transparent"
+            >
+              <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} />
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -507,43 +591,37 @@ export function LaunchTokenForm() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <Label htmlFor="buy-amount">Initial Buy Amount (SOL)</Label>
                   <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4" />
-                    <span className="text-sm font-medium">Wallet Status</span>
+                    <Input
+                      id="buy-amount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={buyAmount}
+                      onChange={(e) => {
+                        setBuyAmount(e.target.value)
+                        if (validationErrors.buyAmount) {
+                          setValidationErrors((prev) => ({ ...prev, buyAmount: "" }))
+                        }
+                      }}
+                      placeholder="0.1"
+                      required
+                      className={validationErrors.buyAmount ? "border-red-500" : ""}
+                    />
+                    <span className="text-sm text-muted-foreground min-w-fit">SOL</span>
                   </div>
-                  {connected ? (
-                    <Badge variant="secondary" className="flex items-center gap-1">
-                      <Check className="h-3 w-3" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <WalletButton />
+                  {validationErrors.buyAmount && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.buyAmount}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Amount of SOL to spend on initial token purchase (minimum 0.01 SOL)
+                  </p>
+                  {solBalance !== null && (
+                    <p className="text-xs text-muted-foreground">Available balance: {solBalance.toFixed(4)} SOL</p>
                   )}
                 </div>
-
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium text-blue-800">Link Preview</CardTitle>
-                    <CardDescription className="text-blue-700">
-                      Your token will be discoverable through these links
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium text-blue-800">Gitr Explore Page</Label>
-                      <div className="p-3 bg-white rounded-md border border-blue-200">
-                        <code className="text-sm text-blue-900 break-all">https://www.gitr.fun/explore</code>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium text-blue-800">GitHub Repository</Label>
-                      <div className="p-3 bg-white rounded-md border border-blue-200">
-                        <code className="text-sm text-blue-900 break-all">{selectedRepo.url}</code>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
 
                 <div className="flex gap-4 pt-4">
                   <Button type="button" variant="outline" onClick={() => setStep(1)}>
@@ -558,7 +636,7 @@ export function LaunchTokenForm() {
                     ) : (
                       <>
                         <Rocket className="mr-2 h-4 w-4" />
-                        Launch Token
+                        Launch Token ({buyAmount} SOL)
                       </>
                     )}
                   </Button>
@@ -591,6 +669,10 @@ export function LaunchTokenForm() {
                   <span className="font-mono text-xs">{launchResult.pumpFunData?.mint?.slice(0, 8)}...</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Initial Purchase:</span>
+                  <span className="font-medium">{launchResult.buyAmount} SOL</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Transaction:</span>
                   <span className="font-mono text-xs">{launchResult.transactionSignature?.slice(0, 8)}...</span>
                 </div>
@@ -605,6 +687,7 @@ export function LaunchTokenForm() {
                   setStep(1)
                   setSelectedRepo(null)
                   setTokenData({ name: "", symbol: "", description: "", imageUrl: "" })
+                  setBuyAmount("0.1")
                   setLaunchResult(null)
                   setError(null)
                 }}

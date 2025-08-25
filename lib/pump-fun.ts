@@ -60,6 +60,8 @@ export async function createPumpFunToken(
   creatorPublicKey: string,
 ): Promise<{ transaction: string; tokenData: PumpFunCreateResponse }> {
   try {
+    console.log("[v0] Calling Pump.fun API with data:", tokenData)
+
     const response = await fetch("/api/pump-fun/create", {
       method: "POST",
       headers: {
@@ -71,13 +73,23 @@ export async function createPumpFunToken(
       }),
     })
 
+    console.log("[v0] Pump.fun API response status:", response.status)
+
     if (!response.ok) {
-      throw new Error("Failed to create token on Pump.fun")
+      const errorText = await response.text()
+      console.error("[v0] Pump.fun API error:", errorText)
+      throw new Error(`Failed to create token on Pump.fun: ${response.status} ${errorText}`)
     }
 
-    return await response.json()
+    const result = await response.json()
+    console.log("[v0] Pump.fun API success:", result)
+
+    return {
+      transaction: result.transaction || "",
+      tokenData: result.tokenData,
+    }
   } catch (error) {
-    console.error("Error creating Pump.fun token:", error)
+    console.error("[v0] Error in createPumpFunToken:", error)
     throw error
   }
 }
