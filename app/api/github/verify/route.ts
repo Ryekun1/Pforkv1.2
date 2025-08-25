@@ -47,11 +47,41 @@ export async function POST(request: NextRequest) {
     // Fetch repository details
     const repoDetails = await fetchRepoDetails(owner, repoName, accessToken)
 
-    // Store/update repository information in database
-    const { data: project, error: dbError } = await supabase
+    const { data: existingProject } = await supabase
       .from("projects")
-      .upsert(
-        {
+      .select("id")
+      .eq("github_repo_url", repoUrl)
+      .eq("user_id", user.id)
+      .single()
+
+    let project
+    if (existingProject) {
+      // Update existing project
+      const { data: updatedProject, error: updateError } = await supabase
+        .from("projects")
+        .update({
+          repo_name: repoDetails.name,
+          repo_description: repoDetails.description,
+          repo_stars: repoDetails.stargazers_count,
+          repo_forks: repoDetails.forks_count,
+          repo_language: repoDetails.language,
+          repo_verified: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingProject.id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error("[v0] Database update error:", updateError)
+        return NextResponse.json({ error: "Failed to update repository information" }, { status: 500 })
+      }
+      project = updatedProject
+    } else {
+      // Insert new project
+      const { data: newProject, error: insertError } = await supabase
+        .from("projects")
+        .insert({
           user_id: user.id,
           github_repo_url: repoUrl,
           repo_name: repoDetails.name,
@@ -60,19 +90,20 @@ export async function POST(request: NextRequest) {
           repo_forks: repoDetails.forks_count,
           repo_language: repoDetails.language,
           repo_verified: true,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "github_repo_url,user_id",
-        },
-      )
-      .select()
-      .single()
+        })
+        .select()
+        .single()
 
-    if (dbError) {
-      console.error("Database error:", dbError)
-      return NextResponse.json({ error: "Failed to save repository information" }, { status: 500 })
+      if (insertError) {
+        console.error("[v0] Database insert error:", insertError)
+        return NextResponse.json({ error: "Failed to save repository information" }, { status: 500 })
+      }
+      project = newProject
     }
+
+    console.log("[v0] Repository verification successful:", { projectId: project.id, repoUrl })
 
     return NextResponse.json({
       success: true,
@@ -86,7 +117,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error verifying repository:", error)
+    console.error("[v0] Error verifying repository:", error)
     return NextResponse.json({ error: "Failed to verify repository" }, { status: 500 })
   }
 }

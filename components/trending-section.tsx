@@ -49,20 +49,69 @@ export function TrendingSection() {
     setLoading(true)
     setError(null)
     try {
-      const [hotResponse, risingResponse, topResponse] = await Promise.all([
-        fetch("/api/trending?category=hot&limit=6"),
-        fetch("/api/trending?category=rising&limit=6"),
-        fetch("/api/trending?category=top&limit=10"),
-      ])
+      console.log("[v0] Starting trending projects fetch...")
 
-      if (!hotResponse.ok || !risingResponse.ok || !topResponse.ok) {
-        throw new Error("Failed to fetch trending projects")
+      const fetchWithDebug = async (url: string) => {
+        console.log("[v0] Fetching:", url)
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+          })
+
+          clearTimeout(timeoutId)
+          console.log("[v0] Response status:", response.status, "for", url)
+
+          if (!response.ok) {
+            console.error("[v0] Response not ok:", response.status, response.statusText)
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+
+          const contentType = response.headers.get("content-type")
+          if (!contentType || !contentType.includes("application/json")) {
+            console.error("[v0] Invalid content type:", contentType)
+            throw new Error(`Expected JSON response, got: ${contentType}`)
+          }
+
+          const text = await response.text()
+          console.log("[v0] Raw response text for", url, ":", text.substring(0, 200) + "...")
+
+          if (!text.trim()) {
+            console.error("[v0] Empty response body")
+            throw new Error("Empty response body")
+          }
+
+          let data
+          try {
+            data = JSON.parse(text)
+            console.log("[v0] Parsed JSON successfully for", url)
+          } catch (parseError) {
+            console.error("[v0] JSON parse error for", url, ":", parseError)
+            console.error("[v0] Raw text that failed to parse:", text)
+            throw new Error(`Failed to parse JSON response: ${parseError}`)
+          }
+
+          console.log("[v0] Data received for", url, ":", data)
+          return data
+        } catch (fetchError) {
+          console.error("[v0] Fetch error for", url, ":", fetchError)
+          if (fetchError.name === "AbortError") {
+            throw new Error("Request timed out")
+          }
+          throw fetchError
+        }
       }
 
       const [hotData, risingData, topData] = await Promise.all([
-        hotResponse.json(),
-        risingResponse.json(),
-        topResponse.json(),
+        fetchWithDebug("/api/trending?category=hot&limit=6"),
+        fetchWithDebug("/api/trending?category=rising&limit=6"),
+        fetchWithDebug("/api/trending?category=top&limit=10"),
       ])
 
       setTrendingProjects({
@@ -70,8 +119,10 @@ export function TrendingSection() {
         rising: risingData.projects || [],
         top: topData.projects || [],
       })
+
+      console.log("[v0] Successfully loaded trending projects")
     } catch (error) {
-      console.error("Error fetching trending projects:", error)
+      console.error("[v0] Error fetching trending projects:", error)
       setError("Failed to load trending projects. Please try again.")
     } finally {
       setLoading(false)
