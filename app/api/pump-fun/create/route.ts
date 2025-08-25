@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       const response = await fetch(image)
       imageFile = await response.blob()
     } else {
-      // This avoids the offscreencanvas dependency that was causing deployment issues
+      // Use default 1x1 pixel PNG
       const defaultImageData =
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg=="
       const response = await fetch(defaultImageData)
@@ -72,25 +72,23 @@ export async function POST(request: NextRequest) {
     console.log("[v0] IPFS upload successful:", metadataResult)
 
     const createTokenPayload = {
-      publicKey: walletAddress, // Required: user's wallet public key
-      action: "create",
-      tokenMetadata: {
-        name: name,
-        symbol: symbol,
-        uri: metadataResult.metadataUri,
-      },
-      mint: mintKeypair.publicKey.toString(),
-      denominatedInSol: "true",
-      amount: buyAmount || 0,
-      slippage: 10,
-      priorityFee: 0.0005,
-      pool: "pump",
+      privateKey: Array.from(mintKeypair.secretKey)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(""), // Convert to hex string
+      amount: (buyAmount || 0) * 1000000000, // Convert SOL to lamports
+      name: name,
+      symbol: symbol,
+      initialSupply: 1000000000, // 1 billion tokens (standard for pump.fun)
+      metadataUri: metadataResult.metadataUri,
+      description: description,
+      image: metadataResult.imageUri || "",
+      website: website || "https://gitr.fun",
     }
 
-    console.log("[v0] Creating token with PumpPortal...")
-    console.log("[v0] Payload:", JSON.stringify(createTokenPayload, null, 2))
+    console.log("[v0] Creating token with official PumpFun API...")
+    console.log("[v0] Payload:", JSON.stringify({ ...createTokenPayload, privateKey: "[REDACTED]" }, null, 2))
 
-    const pumpResponse = await fetch("https://pumpportal.fun/api/trade-local", {
+    const pumpResponse = await fetch("https://docs.pumpfunapi.org/pumpfun/create/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -99,32 +97,32 @@ export async function POST(request: NextRequest) {
     })
 
     const responseText = await pumpResponse.text()
-    console.log("[v0] PumpPortal response status:", pumpResponse.status)
-    console.log("[v0] PumpPortal response:", responseText)
+    console.log("[v0] PumpFun API response status:", pumpResponse.status)
+    console.log("[v0] PumpFun API response:", responseText)
 
     if (!pumpResponse.ok) {
-      console.error("[v0] PumpPortal API error:", responseText)
-      throw new Error(`PumpPortal API failed: ${pumpResponse.status} ${responseText}`)
+      console.error("[v0] PumpFun API error:", responseText)
+      throw new Error(`PumpFun API failed: ${pumpResponse.status} ${responseText}`)
     }
 
     let pumpResult
     try {
       pumpResult = JSON.parse(responseText)
     } catch (parseError) {
-      console.error("[v0] Failed to parse PumpPortal response:", parseError)
-      throw new Error(`Invalid JSON response from PumpPortal: ${responseText}`)
+      console.error("[v0] Failed to parse PumpFun response:", parseError)
+      throw new Error(`Invalid JSON response from PumpFun: ${responseText}`)
     }
 
-    console.log("[v0] PumpPortal token creation successful:", pumpResult)
+    console.log("[v0] PumpFun token creation successful:", pumpResult)
 
     const tokenData = {
-      mint: mintKeypair.publicKey.toString(),
+      mint: pumpResult.mint || mintKeypair.publicKey.toString(),
       bondingCurve: pumpResult.bondingCurve || "Generated",
       associatedBondingCurve: pumpResult.associatedBondingCurve || "Generated",
       metadata: pumpResult.metadata || metadataResult.metadataUri,
       metadataUri: metadataResult.metadataUri,
-      signature: pumpResult.signature || `local_tx_${Date.now()}`,
-      unsignedTransaction: pumpResult.transaction || null,
+      signature: pumpResult.signature || pumpResult.transactionId || `pump_tx_${Date.now()}`,
+      transactionId: pumpResult.transactionId,
     }
 
     return NextResponse.json({
