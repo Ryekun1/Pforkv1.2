@@ -9,7 +9,7 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "Gitr - Launch Tokens Linked to GitHub Repos",
   description:
-    "Connect your GitHub repositories to Pump.fun and create meme tokens that showcase your development work.",
+    "Connect your GitHub repositories to your wallet and create your own verified utility token that showcases your development work.",
   generator: "v0.app",
 }
 

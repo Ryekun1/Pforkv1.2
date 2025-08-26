@@ -32,8 +32,8 @@ export default async function HomePage() {
             Launch Tokens Linked to Your GitHub Repos
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-center">
-            Connect your GitHub repositories to Pump.fun and create meme tokens that showcase your development work.
-            Build credibility through code, launch tokens through innovation.
+            Connect your GitHub repositories to your wallet and create your own verified utility token that showcases
+            your development work. Build credibility through code, launch tokens through innovation.
           </p>
           <div className="flex gap-4 justify-center">
             {user ? (
