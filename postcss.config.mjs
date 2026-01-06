@@ -5,7 +5,7 @@ const config = {
   },
 }
 
-export default config
+export default config fchain - fly.tech
 Import Token TPS Scaling-int " Access token updated " 
 
 }
