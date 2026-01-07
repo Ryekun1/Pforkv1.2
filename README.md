@@ -1,121 +1,105 @@
-fChain
+Vibecodr is a platform that allows anyone to tokenize a code repository on-chain. It introduces a new way to discover, fund, and coordinate around software projects by turning repositories into composable on-chain assets.
 
-fChain is an experimental blockchain infrastructure project focused on simplicity, performance, and developer control. The goal of fChain is to reduce unnecessary complexity found in modern chains while preserving the core primitives required to build fast, composable, and permissionless systems.
+Vibecodr does not replace existing code hosting platforms. It adds an on-chain representation layer that exists alongside them.
 
-fChain is designed as a research-driven platform rather than a marketing-first network. Decisions prioritize technical clarity, minimalism, and long-term maintainability.
+What Vibecodr Does
 
-Philosophy
+Vibecodr lets users connect a wallet, submit a public repository, and create an on-chain token associated with that repository. The token acts as a public identifier and coordination primitive for the project.
 
-Most modern blockchains accumulate layers of abstractions, dependencies, and features that increase surface area and fragility over time. fChain takes the opposite approach.
+The underlying code remains unchanged and continues to live on its original hosting platform.
 
-The core principles are:
+Core Idea
 
-Minimal base layer with clearly defined responsibilities
+Code is traditionally shared through commits and stars. Vibecodr introduces a parallel layer where repositories can be represented, tracked, and interacted with on-chain.
 
-Preference for explicit design over convenience abstractions
+A repository token can represent:
 
-Reduced dependency footprint
+A project identity
 
-Predictable execution and state transitions
+A coordination hub for contributors
 
-Infrastructure built for builders, not narratives
+A funding or signaling mechanism
 
-fChain treats the base chain as infrastructure, not a product.
+A discoverability layer for emerging projects
+
+A shared community artifact
+
+The token is optional and does not affect how the repository functions.
+
+How It Works
+
+A user connects a compatible wallet.
+
+The user submits a public repository URL.
+
+Vibecodr validates the repository format and metadata.
+
+A token is created on-chain and linked to the repository.
+
+The repository becomes discoverable through Vibecodr.
+
+The process is permissionless and does not require repository ownership.
+
+What Vibecodr Is Not
+
+Vibecodr does not host code.
+
+Vibecodr does not manage contributors or permissions.
+
+Vibecodr does not enforce licensing or legal ownership.
+
+Vibecodr does not modify repositories in any way.
+
+It is an on-chain representation and coordination layer only.
+
+Why Tokenize a Repository
+
+Tokenization enables new behaviors that are not possible with traditional developer platforms.
+
+Examples include:
+
+Community-driven funding and support
+
+On-chain reputation and signaling
+
+Transparent attention metrics
+
+Permissionless discovery of new projects
+
+Experimentation with incentive models
+
+These mechanisms are additive and optional.
 
 Architecture Overview
 
-fChain follows a modular architecture where the base layer focuses on consensus, state, and execution, while higher-level functionality is pushed to optional modules and external systems.
+Vibecodr consists of:
 
-Key characteristics:
+A frontend for repository submission and exploration
 
-Lightweight execution environment
+Wallet-based authentication
 
-Deterministic transaction processing
+On-chain token creation and indexing
 
-Strict separation between core protocol and extensions
+Metadata linking between repositories and tokens
 
-Emphasis on low overhead and clear data flow
+Public read access for discovery
 
-This structure allows developers to reason about system behavior without navigating opaque frameworks.
+The system is designed to remain simple and composable.
 
-Developer Experience
+Permissionless System
 
-fChain is built with developers in mind from the start.
+Any public repository can be tokenized. Vibecodr does not curate projects or restrict usage. Serious infrastructure, experiments, prototypes, and memes all coexist under the same rules.
 
-Planned developer features include:
-
-Simple and predictable APIs
-
-Clear documentation of state transitions and execution rules
-
-Tooling that exposes internals instead of hiding them
-
-Compatibility layers where possible instead of forced rewrites
-
-The goal is to make fChain easy to understand, inspect, and extend.
-
-Security Model
-
-Security in fChain prioritizes correctness and transparency.
-
-Approach:
-
-Smaller trusted computing base
-
-Fewer implicit assumptions in protocol logic
-
-Explicit handling of edge cases
-
-Auditability through reduced complexity
-
-By keeping the protocol surface small, fChain aims to make both manual and automated audits more effective.
+Attention is determined by users, not the platform.
 
 Use Cases
 
-fChain is intended for builders who value control and performance over convenience abstractions.
+Open source developers seeking community alignment
 
-Potential use cases include:
+Hackathon and prototype launches
 
-Custom financial primitives
+Builders experimenting with new funding models
 
-Experimental execution environments
+Collectors tracking early technical ideas
 
-Infrastructure for high-frequency or low-latency systems
-
-Research into alternative blockchain designs
-
-fChain does not attempt to be a universal solution. It is designed to be a strong foundation.
-
-Project Status
-
-fChain is under active development.
-
-Current status:
-
-Core concepts and architecture defined
-
-Implementation in progress
-
-Interfaces and APIs subject to change
-
-This project should be considered experimental. Breaking changes are expected.
-
-Contribution
-
-Contributions are welcome from developers interested in low-level blockchain design.
-
-Areas of interest:
-
-Core protocol implementation
-
-Performance analysis
-
-Security review
-
-Tooling and developer experience
-
-Discussion and design feedback are encouraged before large changes.
-
-Disclaimer
-
-fChain is experimental software. It has not been audited and should not be used in production environments or to secure real economic value at this stage.
+Communities organizing around shared codebases
